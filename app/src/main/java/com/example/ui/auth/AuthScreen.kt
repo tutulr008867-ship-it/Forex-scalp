@@ -62,6 +62,7 @@ fun AuthScreen(
   onToggleTheme: () -> Unit,
   onAuthSuccess: () -> Unit,
   modifier: Modifier = Modifier,
+  isFirebaseConfigured: Boolean = true,
 ) {
   val colors = SweepPulseTheme.colors
   val context = LocalContext.current
@@ -70,14 +71,16 @@ fun AuthScreen(
   var isLoading by remember { mutableStateOf(false) }
   var errorMessage by remember { mutableStateOf<String?>(null) }
 
-  LaunchedEffect(Unit) {
-    attemptAutoSignIn(
-      context = context,
-      credentialManager = credentialManager,
-      onAuthSuccess = onAuthSuccess,
-      onUnauthenticated = {},
-      scope = scope,
-    )
+  LaunchedEffect(isFirebaseConfigured) {
+    if (isFirebaseConfigured) {
+      attemptAutoSignIn(
+        context = context,
+        credentialManager = credentialManager,
+        onAuthSuccess = onAuthSuccess,
+        onUnauthenticated = {},
+        scope = scope,
+      )
+    }
   }
 
   Box(
@@ -215,6 +218,22 @@ fun AuthScreen(
       Spacer(modifier = Modifier.height(24.dp))
 
       Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (!isFirebaseConfigured) {
+          Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.errorContainer,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
+            modifier = Modifier.fillMaxWidth().testTag("firebase_missing_banner"),
+          ) {
+            Text(
+              text =
+                "Firebase config (app/google-services.json) was not included in this APK build. Add app/google-services.json (or the GOOGLE_SERVICES_JSON GitHub Secret) and rebuild to enable Google Sign-In & Cloud Sync.",
+              style = MaterialTheme.typography.bodyMedium,
+              color = MaterialTheme.colorScheme.onErrorContainer,
+              modifier = Modifier.padding(12.dp),
+            )
+          }
+        }
         if (!errorMessage.isNullOrBlank()) {
           Surface(
             shape = RoundedCornerShape(12.dp),

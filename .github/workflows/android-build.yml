@@ -39,7 +39,9 @@ jobs:
           yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
           "$SDKMANAGER" "platforms;android-36.1" "build-tools;36.0.0" "platform-tools"
 
-      - name: Prepare debug keystore & env
+      - name: Prepare debug keystore, google-services & env
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
           if [ ! -f debug.keystore ]; then
             if [ -f debug.keystore.base64 ]; then
@@ -47,6 +49,9 @@ jobs:
             else
               keytool -genkeypair -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
             fi
+          fi
+          if [ ! -f app/google-services.json ] && [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
           fi
           [ -f .env ] || touch .env
 
@@ -60,7 +65,7 @@ jobs:
           JAVA_TOOL_OPTIONS: "-Djava.awt.headless=true"
         run: |
           echo "Checking config files:"
-          [ -f app/google-services.json ] && echo " - app/google-services.json: present" || echo "::warning::app/google-services.json is missing!"
+          [ -f app/google-services.json ] && echo " - app/google-services.json: present" || echo "::warning::app/google-services.json is missing! Add it or set GOOGLE_SERVICES_JSON secret for Firebase Sign-In."
           [ -f debug.keystore ] && echo " - debug.keystore: present" || echo "::warning::debug.keystore is missing!"
           set +e
           gradle assembleDebug --no-daemon --no-configuration-cache --no-build-cache --console=plain \

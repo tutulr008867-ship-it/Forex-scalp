@@ -83,6 +83,7 @@ import com.example.ui.theme.SweepPulseTheme
 import com.example.ui.theme.ThemePreferences
 import com.example.ui.viewmodel.TradingViewModel
 import com.google.firebase.Firebase
+import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -143,10 +144,28 @@ fun AppNavigation(
   onToggleTheme: () -> Unit,
   deepLinkTarget: Pair<MarketPair, Timeframe>?,
   onDeepLinkConsumed: () -> Unit,
-  auth: FirebaseAuth = Firebase.auth,
+  auth: FirebaseAuth? = null,
 ) {
+  val context = LocalContext.current
+  val resolvedAuth =
+    remember(auth, context) {
+      auth ?: runCatching {
+        if (FirebaseApp.getApps(context).isNotEmpty()) Firebase.auth else null
+      }.getOrNull()
+    }
+
+  if (resolvedAuth == null) {
+    AuthScreen(
+      isDarkTheme = isDarkTheme,
+      onToggleTheme = onToggleTheme,
+      onAuthSuccess = {},
+      isFirebaseConfigured = false,
+    )
+    return
+  }
+
   val currentUser by
-    auth.authStateFlow().collectAsStateWithLifecycle(initialValue = auth.currentUser)
+    resolvedAuth.authStateFlow().collectAsStateWithLifecycle(initialValue = resolvedAuth.currentUser)
   val user = currentUser
 
   if (user == null) {
@@ -154,6 +173,7 @@ fun AppNavigation(
       isDarkTheme = isDarkTheme,
       onToggleTheme = onToggleTheme,
       onAuthSuccess = {},
+      isFirebaseConfigured = true,
     )
   } else {
     val uid = user.uid
@@ -171,7 +191,7 @@ fun AppNavigation(
                 val databaseId = app.getString(R.string.firestore_database_id)
                 val db = FirebaseFirestore.getInstance(databaseId)
                 TradingViewModel(
-                  signalRepository = SignalRepository(db, auth),
+                  signalRepository = SignalRepository(db, resolvedAuth),
                   marketDataRepository = MarketDataRepository.create(),
                   currentUserId = uid,
                 )
@@ -180,6 +200,7 @@ fun AppNavigation(
         )
       SweepPulseAppContent(
         viewModel = tradingViewModel,
+        auth = resolvedAuth,
         isDarkTheme = isDarkTheme,
         onToggleTheme = onToggleTheme,
         deepLinkTarget = deepLinkTarget,
@@ -192,6 +213,7 @@ fun AppNavigation(
 @Composable
 private fun SweepPulseAppContent(
   viewModel: TradingViewModel,
+  auth: FirebaseAuth,
   isDarkTheme: Boolean,
   onToggleTheme: () -> Unit,
   deepLinkTarget: Pair<MarketPair, Timeframe>?,
@@ -213,7 +235,7 @@ private fun SweepPulseAppContent(
     val localNotificationService =
       FirebaseSignalNotificationService(
         context = context.applicationContext,
-        signalRepository = SignalRepository(db, Firebase.auth),
+        signalRepository = SignalRepository(db, auth),
         userId = viewModel.currentUserId,
       )
     localNotificationService.start(serviceScope)
