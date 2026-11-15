@@ -1,0 +1,200 @@
+{
+  "entities": {
+    "TradingSignal": {
+      "title": "TradingSignal",
+      "description": "Smart Money Concepts (SMC) liquidity sweep and 26-indicator trading signal record.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Authenticated Firebase UID of the signal owner."
+        },
+        "symbol": {
+          "type": "string",
+          "description": "Market symbol (e.g., BTCUSD, XAUUSD, EURUSD)."
+        },
+        "timeframe": {
+          "type": "string",
+          "enum": ["1m", "5m", "15m", "30m"],
+          "description": "Candlestick timeframe."
+        },
+        "direction": {
+          "type": "string",
+          "enum": ["BUY", "SELL"],
+          "description": "Trade signal direction."
+        },
+        "strength": {
+          "type": "string",
+          "enum": ["STRONG_BUY", "BUY", "NEUTRAL", "SELL", "STRONG_SELL"],
+          "description": "Combined 26-indicator + SMC rating."
+        },
+        "smcEvent": {
+          "type": "string",
+          "description": "Detected SMC liquidity sweep or market structure event."
+        },
+        "entryPrice": {
+          "type": "number",
+          "description": "Recommended market entry price."
+        },
+        "stopLoss": {
+          "type": "number",
+          "description": "Invalidation stop-loss price level."
+        },
+        "takeProfit1": {
+          "type": "number",
+          "description": "First target take-profit price level."
+        },
+        "takeProfit2": {
+          "type": "number",
+          "description": "Second target take-profit price level."
+        },
+        "takeProfit3": {
+          "type": "number",
+          "description": "Third target take-profit price level."
+        },
+        "sweptLiquidityLevel": {
+          "type": "number",
+          "description": "Price level where buy-side or sell-side liquidity was swept."
+        },
+        "riskRewardRatio": {
+          "type": "number",
+          "description": "Risk-to-reward ratio to TP2."
+        },
+        "buyIndicators": {
+          "type": "integer",
+          "description": "Number of TradingView indicators voting BUY out of 26."
+        },
+        "sellIndicators": {
+          "type": "integer",
+          "description": "Number of TradingView indicators voting SELL out of 26."
+        },
+        "neutralIndicators": {
+          "type": "integer",
+          "description": "Number of TradingView indicators voting NEUTRAL out of 26."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["ACTIVE", "TP_HIT", "SL_HIT", "DISMISSED"],
+          "description": "Lifecycle state of the tracked trading signal."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Human-readable SMC and indicator confluence summary."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when created (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when updated (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "userId",
+        "symbol",
+        "timeframe",
+        "direction",
+        "strength",
+        "smcEvent",
+        "entryPrice",
+        "stopLoss",
+        "takeProfit1",
+        "takeProfit2",
+        "takeProfit3",
+        "sweptLiquidityLevel",
+        "riskRewardRatio",
+        "buyIndicators",
+        "sellIndicators",
+        "neutralIndicators",
+        "status",
+        "notes",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AlertConfig": {
+      "title": "AlertConfig",
+      "description": "Per-symbol or global push notification and liquidity sweep alert settings.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Authenticated Firebase UID of the owner."
+        },
+        "symbol": {
+          "type": "string",
+          "description": "Symbol identifier or ALL for global defaults."
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether notifications are active for this symbol."
+        },
+        "tf1m": {
+          "type": "boolean",
+          "description": "Enable 1-minute timeframe alerts."
+        },
+        "tf5m": {
+          "type": "boolean",
+          "description": "Enable 5-minute timeframe alerts."
+        },
+        "tf15m": {
+          "type": "boolean",
+          "description": "Enable 15-minute timeframe alerts."
+        },
+        "tf30m": {
+          "type": "boolean",
+          "description": "Enable 30-minute timeframe alerts."
+        },
+        "minConfluence": {
+          "type": "integer",
+          "description": "Minimum aligned TradingView indicators out of 26 required to fire an alert."
+        },
+        "requireLiquiditySweep": {
+          "type": "boolean",
+          "description": "Only alert when an SMC liquidity sweep is confirmed."
+        },
+        "fcmToken": {
+          "type": "string",
+          "description": "Latest Firebase Cloud Messaging registration token for push delivery."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when created (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when updated (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "userId",
+        "symbol",
+        "enabled",
+        "tf1m",
+        "tf5m",
+        "tf15m",
+        "tf30m",
+        "minConfluence",
+        "requireLiquiditySweep",
+        "fcmToken",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/signals/{signalId}": {
+      "schema": { "$ref": "#/entities/TradingSignal" },
+      "description": "User-saved and triggered SMC liquidity sweep trading signals."
+    },
+    "/users/{userId}/alert_configs/{configId}": {
+      "schema": { "$ref": "#/entities/AlertConfig" },
+      "description": "User alert preferences, timeframe toggles, confluence thresholds, and FCM token."
+    }
+  }
+}

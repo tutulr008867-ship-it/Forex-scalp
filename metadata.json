@@ -1,0 +1,6 @@
+{
+  "name": "SweepPulse",
+  "description": "Smart Money Concepts (SMC) liquidity sweep & 26-indicator trading signal provider for BTCUSD, XAUUSD, and major forex pairs with real-time entry, stop-loss, and Firebase alert notifications.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,155 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net: Default-deny all paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Hardened Global Helpers
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // TradingSignal Validation Blueprint
+    function isValidTradingSignal(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.symbol is string && data.symbol.size() >= 3 && data.symbol.size() <= 16 &&
+             data.timeframe in ['1m', '5m', '15m', '30m'] &&
+             data.direction in ['BUY', 'SELL'] &&
+             data.strength in ['STRONG_BUY', 'BUY', 'NEUTRAL', 'SELL', 'STRONG_SELL'] &&
+             data.smcEvent is string && data.smcEvent.size() >= 2 && data.smcEvent.size() <= 64 &&
+             data.entryPrice is number && data.entryPrice > 0 &&
+             data.stopLoss is number && data.stopLoss > 0 &&
+             data.takeProfit1 is number && data.takeProfit1 > 0 &&
+             data.takeProfit2 is number && data.takeProfit2 > 0 &&
+             data.takeProfit3 is number && data.takeProfit3 > 0 &&
+             data.sweptLiquidityLevel is number && data.sweptLiquidityLevel >= 0 &&
+             data.riskRewardRatio is number && data.riskRewardRatio >= 0 && data.riskRewardRatio <= 100 &&
+             data.buyIndicators is int && data.buyIndicators >= 0 && data.buyIndicators <= 26 &&
+             data.sellIndicators is int && data.sellIndicators >= 0 && data.sellIndicators <= 26 &&
+             data.neutralIndicators is int && data.neutralIndicators >= 0 && data.neutralIndicators <= 26 &&
+             (data.buyIndicators + data.sellIndicators + data.neutralIndicators) == 26 &&
+             data.status in ['ACTIVE', 'TP_HIT', 'SL_HIT', 'DISMISSED'] &&
+             data.notes is string && data.notes.size() <= 500;
+    }
+
+    // AlertConfig Validation Blueprint
+    function isValidAlertConfig(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.symbol is string && data.symbol.size() >= 3 && data.symbol.size() <= 16 &&
+             data.enabled is bool &&
+             data.tf1m is bool &&
+             data.tf5m is bool &&
+             data.tf15m is bool &&
+             data.tf30m is bool &&
+             data.minConfluence is int && data.minConfluence >= 1 && data.minConfluence <= 26 &&
+             data.requireLiquiditySweep is bool &&
+             data.fcmToken is string && data.fcmToken.size() <= 512;
+    }
+
+    match /users/{userId}/signals/{signalId} {
+      allow list: if isOwner(userId);
+      allow get: if isOwner(userId) && isValidId(signalId);
+
+      allow create: if isOwner(userId) &&
+                       isValidId(signalId) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll([
+                         'userId', 'symbol', 'timeframe', 'direction', 'strength',
+                         'smcEvent', 'entryPrice', 'stopLoss', 'takeProfit1',
+                         'takeProfit2', 'takeProfit3', 'sweptLiquidityLevel',
+                         'riskRewardRatio', 'buyIndicators', 'sellIndicators',
+                         'neutralIndicators', 'status', 'notes', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'symbol', 'timeframe', 'direction', 'strength',
+                         'smcEvent', 'entryPrice', 'stopLoss', 'takeProfit1',
+                         'takeProfit2', 'takeProfit3', 'sweptLiquidityLevel',
+                         'riskRewardRatio', 'buyIndicators', 'sellIndicators',
+                         'neutralIndicators', 'status', 'notes', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().createdAt is timestamp && incoming().createdAt <= request.time &&
+                       incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                       isValidTradingSignal(incoming());
+
+      allow update: if isOwner(userId) &&
+                       isValidId(signalId) &&
+                       isValidTradingSignal(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().symbol == existing().symbol &&
+                       incoming().timeframe == existing().timeframe &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                       // Terminal State Locking: only ACTIVE signals can transition or update status
+                       existing().status == 'ACTIVE' &&
+                       (
+                         // Action 1: Resolve signal outcome (TP_HIT, SL_HIT, DISMISSED)
+                         (incoming().status in ['TP_HIT', 'SL_HIT', 'DISMISSED'] &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'notes', 'updatedAt'])) ||
+                         // Action 2: Refresh active signal levels/indicators
+                         (incoming().status == 'ACTIVE' &&
+                          incoming().diff(existing()).affectedKeys().hasOnly([
+                            'direction', 'strength', 'smcEvent', 'entryPrice', 'stopLoss',
+                            'takeProfit1', 'takeProfit2', 'takeProfit3', 'sweptLiquidityLevel',
+                            'riskRewardRatio', 'buyIndicators', 'sellIndicators',
+                            'neutralIndicators', 'notes', 'updatedAt'
+                          ]))
+                       );
+
+      allow delete: if isOwner(userId) && isValidId(signalId);
+    }
+
+    match /users/{userId}/alert_configs/{configId} {
+      allow list: if isOwner(userId);
+      allow get: if isOwner(userId) && isValidId(configId);
+
+      allow create: if isOwner(userId) &&
+                       isValidId(configId) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll([
+                         'userId', 'symbol', 'enabled', 'tf1m', 'tf5m', 'tf15m',
+                         'tf30m', 'minConfluence', 'requireLiquiditySweep',
+                         'fcmToken', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'symbol', 'enabled', 'tf1m', 'tf5m', 'tf15m',
+                         'tf30m', 'minConfluence', 'requireLiquiditySweep',
+                         'fcmToken', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().createdAt is timestamp && incoming().createdAt <= request.time &&
+                       incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                       isValidAlertConfig(incoming());
+
+      allow update: if isOwner(userId) &&
+                       isValidId(configId) &&
+                       isValidAlertConfig(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().symbol == existing().symbol &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'enabled', 'tf1m', 'tf5m', 'tf15m', 'tf30m',
+                         'minConfluence', 'requireLiquiditySweep', 'fcmToken', 'updatedAt'
+                       ]);
+
+      allow delete: if isOwner(userId) && isValidId(configId);
+    }
+  }
+}
