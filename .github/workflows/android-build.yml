@@ -59,24 +59,29 @@ jobs:
         env:
           JAVA_TOOL_OPTIONS: "-Djava.awt.headless=true"
         run: |
+          echo "Checking config files:"
+          [ -f app/google-services.json ] && echo " - app/google-services.json: present" || echo "::warning::app/google-services.json is missing!"
+          [ -f debug.keystore ] && echo " - debug.keystore: present" || echo "::warning::debug.keystore is missing!"
           set +e
-          gradle assembleDebug --no-daemon --no-configuration-cache --stacktrace --console=plain \
+          gradle assembleDebug --no-daemon --no-configuration-cache --no-build-cache --console=plain \
             -Dorg.gradle.workers.max=2 \
             -Dorg.gradle.jvmargs="-Xmx2560m -XX:MaxMetaspaceSize=768m -Djava.awt.headless=true -Dfile.encoding=UTF-8" \
             2>&1 | tee gradle-build.log
           EXIT_CODE=${PIPESTATUS[0]}
           if [ "$EXIT_CODE" -ne 0 ]; then
             {
-              echo "## Gradle Failure Details"
+              echo "## Gradle Compiler / Build Errors"
               echo '```text'
-              tail -n 100 gradle-build.log
+              grep -nE "^e: |FAILURE:|What went wrong:|Execution failed|Unresolved reference" gradle-build.log | head -n 40 || true
+              echo "--- Tail of build log ---"
+              tail -n 60 gradle-build.log
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
-            ERR_SUMMARY="$(grep -A 6 'What went wrong:' gradle-build.log | tr '\n' ' ' | sed 's/  */ /g' || true)"
-            if [ -n "$ERR_SUMMARY" ]; then
-              echo "::error::${ERR_SUMMARY}"
+            FIRST_ERR="$(grep -E "^e: |Execution failed|What went wrong:" gradle-build.log | head -n 5 | tr '\n' ' ' | sed 's/  */ /g' || true)"
+            if [ -n "$FIRST_ERR" ]; then
+              echo "::error::${FIRST_ERR}"
             else
-              echo "::error::Gradle failed with exit code ${EXIT_CODE}. See Gradle Failure Details above in Summary."
+              echo "::error::Gradle failed with exit code ${EXIT_CODE}. See Gradle Compiler / Build Errors in Summary."
             fi
           fi
           exit "$EXIT_CODE"
