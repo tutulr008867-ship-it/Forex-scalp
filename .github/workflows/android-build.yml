@@ -25,15 +25,19 @@ jobs:
       - name: Accept Android SDK licenses & install Android 36.1
         run: |
           SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
           SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -name sdkmanager -type f 2>/dev/null | head -n 1 || true)"
           if [ -z "$SDKMANAGER" ] && [ -x "$SDK_ROOT/tools/bin/sdkmanager" ]; then
             SDKMANAGER="$SDK_ROOT/tools/bin/sdkmanager"
           fi
-          if [ -n "$SDKMANAGER" ]; then
-            set +o pipefail
-            yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
-            "$SDKMANAGER" "platforms;android-36.1" "build-tools;36.0.0" "platform-tools"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "::error::Android sdkmanager not found under $SDK_ROOT"
+            exit 1
           fi
+          set +o pipefail
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          "$SDKMANAGER" "platforms;android-36.1" "build-tools;36.0.0" "platform-tools"
 
       - name: Prepare debug keystore & env
         run: |
@@ -55,8 +59,27 @@ jobs:
         env:
           JAVA_TOOL_OPTIONS: "-Djava.awt.headless=true"
         run: |
-          gradle assembleDebug --no-daemon --stacktrace --console=plain \
-            -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=1g -Djava.awt.headless=true -Dfile.encoding=UTF-8"
+          set +e
+          gradle assembleDebug --no-daemon --no-configuration-cache --stacktrace --console=plain \
+            -Dorg.gradle.workers.max=2 \
+            -Dorg.gradle.jvmargs="-Xmx2560m -XX:MaxMetaspaceSize=768m -Djava.awt.headless=true -Dfile.encoding=UTF-8" \
+            2>&1 | tee gradle-build.log
+          EXIT_CODE=${PIPESTATUS[0]}
+          if [ "$EXIT_CODE" -ne 0 ]; then
+            {
+              echo "## Gradle Failure Details"
+              echo '```text'
+              tail -n 100 gradle-build.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            ERR_SUMMARY="$(grep -A 6 'What went wrong:' gradle-build.log | tr '\n' ' ' | sed 's/  */ /g' || true)"
+            if [ -n "$ERR_SUMMARY" ]; then
+              echo "::error::${ERR_SUMMARY}"
+            else
+              echo "::error::Gradle failed with exit code ${EXIT_CODE}. See Gradle Failure Details above in Summary."
+            fi
+          fi
+          exit "$EXIT_CODE"
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
